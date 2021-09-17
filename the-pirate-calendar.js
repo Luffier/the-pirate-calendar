@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.4
+// @version      0.4.1
 // @description  Adds RARBG links to trakt.tv (now with settings menu!)
 // @author       luffier
 // @namespace    PirateCalendar
@@ -76,7 +76,7 @@
         show: /^\/shows\/([^\/]+)(\/)?$/,
         season: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)(\/)?$/,
         episode: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)\/episodes\/([^\/]+)(\/)?$/,
-    }
+    };
     const intervals = {};
     var urlRarbg;
 
