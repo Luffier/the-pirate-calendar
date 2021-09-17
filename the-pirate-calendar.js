@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.4.1
+// @version      0.4.2
 // @description  Adds RARBG links to trakt.tv (now with settings menu!)
 // @author       luffier
 // @namespace    PirateCalendar
@@ -20,7 +20,7 @@
 // @run-at       document-idle
 // @homepageURL  https://github.com/Luffier/the-pirate-calendar
 // @supportURL   https://github.com/Luffier/the-pirate-calendar/issues
-// @updateURL    https://raw.githubusercontent.com/Luffier/the-pirate-calendar/main/the-pirate-calendar.js
+// @updateURL    https://raw.githubusercontent.com/Luffier/the-pirate-calendar/main/meta/the-pirate-calendar.js
 // @downloadURL  https://raw.githubusercontent.com/Luffier/the-pirate-calendar/main/the-pirate-calendar.js
 // ==/UserScript==
 
