@@ -1,13 +1,12 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.4.3
-// @description  Adds RARBG links to trakt.tv (now with a settings menu!)
+// @version      0.5.0
+// @description  Adds torrent links (RARBG, The Pirate Bay, and more) to trakt.tv (now with a settings menu!)
 // @author       luffier
 // @namespace    PirateCalendar
 // @license      MIT
-// @match        *://trakt.tv/calendars/my/shows
-// @match        *://trakt.tv/calendars/my/shows/*
-// @match        *://trakt.tv/shows/*
+// @match        *://trakt.tv/
+// @match        *://trakt.tv/*
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @require      https://code.jquery.com/jquery-3.6.0.slim.min.js
 // @grant        GM_addStyle
@@ -20,8 +19,6 @@
 // @run-at       document-idle
 // @homepageURL  https://github.com/Luffier/the-pirate-calendar
 // @supportURL   https://github.com/Luffier/the-pirate-calendar/issues
-// @updateURL    https://raw.githubusercontent.com/Luffier/the-pirate-calendar/main/meta/the-pirate-calendar.js
-// @downloadURL  https://raw.githubusercontent.com/Luffier/the-pirate-calendar/main/the-pirate-calendar.js
 // ==/UserScript==
 
 /* globals $, GM_config */
@@ -35,7 +32,7 @@
         `
             <style>
                 iframe#PirateCalendarConfig {
-                    height: 360px !important;
+                    height: 480px !important;
                     width: 500px !important;
                 }
                 .actions .tpc {
@@ -77,44 +74,75 @@
         season: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)(\/)?$/,
         episode: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)\/episodes\/([^\/]+)(\/)?$/,
     };
+    const searchEngines = {
+        'RARBG': {
+            'defaultUrl': 'https://rarbg.to/',
+            'defaultSearch': 'torrents.php?order=size&by=DESC&search=%s',
+            'cleanQuery': (query) => encodeURIComponent(query).replace(/%20/g, '+')
+        },
+        'The Pirate Bay': {
+            'defaultUrl': 'https://thepiratebay.org/',
+            'defaultSearch': 'search/%s/1/5/0',
+            'cleanQuery': (query) => encodeURIComponent(query)
+        },
+        'EZTV': {
+            'defaultUrl': '',
+            'defaultSearch': '',
+            'cleanQuery': (query) => encodeURIComponent(query).replace(/%20/g, '+')
+        }
+    };
     const intervals = {};
-    var urlRarbg;
-
 
     /* SETTINGS MENU */
     GM_config.init({
         'id': 'PirateCalendarConfig',
         'title': 'The Pirate Calendar Settings',
         'fields': {
-            'autoscrollToday': {
-                'label': 'Auto scroll to current day',
+            'openInNewTab': {
+                'label': 'Open links in new tab:',
                 'type': 'checkbox',
-                'default': true
+                'default': true,
+                'section': ['General']
+            },
+            'autoscrollToday': {
+                'label': 'Auto scroll to current day:',
+                'type': 'checkbox',
+                'default': true,
+                'section': ['Calendar']
             },
             'hideCollectIcon': {
-                'label': 'Hide collect icon',
+                'label': 'Hide collect icon:',
                 'type': 'checkbox',
                 'default': false
             },
             'hideListIcon': {
-                'label': 'Hide list icon',
+                'label': 'Hide list icon:',
                 'type': 'checkbox',
                 'default': false
             },
             'hideWatchtIcon': {
-                'label': 'Hide watch-now icon',
+                'label': 'Hide watch-now icon:',
                 'type': 'checkbox',
                 'default': false
             },
-            'openInNewTab': {
-                'label': 'Open links in new tab',
-                'type': 'checkbox',
-                'default': true
+            'torrentSearchEngine': {
+                'label': 'Preferred torrent search engine:',
+                'type': 'select',
+                'options': ['RARBG', 'The Pirate Bay'],
+                'default': 'RARBG',
+                'section': ['Search engine']
             },
-            'customUrlRarbg': {
-                'label': 'RARBG URL',
+            'customUrl': {
+                'label': '&#183; URL:',
+                'title': 'For a custom URL (like a proxy)',
                 'type': 'text',
-                'default': 'https://rarbg.to/'
+                'default': searchEngines.RARBG.defaultUrl
+            },
+            'customSearch': {
+                'label': '&#183; Search query:',
+                'title': 'For a custom search query. Place "%s" where the query should be',
+                'type': 'text',
+                'default': searchEngines.RARBG.defaultSearch
             }
         },
         'css':
@@ -163,9 +191,31 @@
                     background-color: #aaa;
                     border: 1px solid transparent;
                 }
+                #PirateCalendarConfig_field_customSearch {
+                    width: 48ex;
+                }
+                .config_var#PirateCalendarConfig_customUrl_var,
+                .config_var#PirateCalendarConfig_customSearch_var {
+                    display: flex;
+                    align-items: center;
+                }
+                .config_var input[type="text"] {
+                    flex-grow: 1;
+                }
             `,
         'events': {
-            'init': () => applySettings(),
+            'init': function() {
+                applySettings();
+            },
+            'open': function() {
+                // Set default URL and search path when the search engine changes
+                GM_config.fields.torrentSearchEngine.node.addEventListener('change', function() {
+                    let searchEngine = searchEngines[this.value];
+                    let section = this.parentElement.parentElement;
+                    section.querySelector('#PirateCalendarConfig_field_customUrl').value = searchEngine.defaultUrl;
+                    section.querySelector('#PirateCalendarConfig_field_customSearch').value = searchEngine.defaultSearch;
+                });
+            },
             'save': function() {
                 applySettings();
                 GM_config.close();
@@ -195,19 +245,31 @@
 
     // Apply settings from the setting's menu
     function applySettings() {
-        // Hide unwanted icons
-        $('div.quick-icons.smaller a.collect').toggle(!GM_config.get('hideCollectIcon'));
-        $('div.quick-icons.smaller a.list').toggle(!GM_config.get('hideListIcon'));
-        $('div.quick-icons.smaller a.watch-now').toggle(!GM_config.get('hideWatchtIcon'));
-        // Set RARBG URL
-        urlRarbg = GM_config.get('customUrlRarbg') + 'torrents.php?order=size&by=DESC&search=';
+        // Apply calendar settings
+        if (regex.calendar.test(location.pathname)) {
+            // Hide unwanted icons
+            $('.quick-icons .collect').toggle(!GM_config.get('hideCollectIcon'));
+            $('.quick-icons .list').toggle(!GM_config.get('hideListIcon'));
+            $('.quick-icons .watch-now').toggle(!GM_config.get('hideWatchtIcon'));
+            // Remove and add all the links again
+            $('.grid-item[data-type="episode"] a.tpc').remove();
+            $('.grid-item[data-type="episode"]').each(function() {
+                addLinkToGridItem(this, 'episode');
+            });
+        }
     }
 
-    function addLinkToGridItem(gridItem, type) {
-        let item = $(gridItem);
-        let actions = item.find('> div.quick-icons > div.actions').first();
-        let itemLink = item.find('a').first().attr('href');
-        let itemLinkMatches = itemLink.match(regex[type]);
+    function makeTorrentURL(query) {
+        let searchEngine = searchEngines[GM_config.get('torrentSearchEngine')];
+        let baseURL = GM_config.get('customUrl');
+        let queryPath = GM_config.get('customSearch');
+        let queryCleaned = searchEngine.cleanQuery(query);
+        let url = baseURL + queryPath.replace(/%s/g, queryCleaned);
+        return url;
+    }
+
+    function extractQueryFromLink(link, type) {
+        let itemLinkMatches = link.match(regex[type]);
         let showTitle = itemLinkMatches[1].replace(/-/g, ' ');
         let seasonNumber = itemLinkMatches[2];
         let codeNumber = '';
@@ -217,37 +279,41 @@
             let episodeNumber = itemLinkMatches[3];
             codeNumber = `S${zeroPad(seasonNumber, 2)}E${zeroPad(episodeNumber, 2)}`;
         }
-        let urlSearch = urlRarbg + encodeURIComponent(showTitle + ' ' + codeNumber).replace(/%20/g, '+');
+        let query = showTitle + ' ' + codeNumber;
+        return query;
+    }
+
+    // Adds a search link to a grid item (like those from the calendar)
+    function addLinkToGridItem(gridItem, type) {
+        let item = $(gridItem);
+        let actions = item.find('> div.quick-icons > div.actions').first();
+        let itemLink = item.find('a').first().attr('href');
+        let query = extractQueryFromLink(itemLink, type);
+        let urlSearch = makeTorrentURL(query);
         let target = GM_config.get('openInNewTab') ? '_blank' : '_self';
+        let searchEngineName = GM_config.get('torrentSearchEngine');
         actions.append(
             `
-            <a class="tpc" href="${urlSearch}" target="${target}" title="Search on RARBG">
+            <a class="tpc" href="${urlSearch}" target="${target}" title="Search on ${searchEngineName}">
                 <div class="trakt-icon-skull-bones"></div>
             </a>
             `
         );
     }
 
+    // Adds a search link to an actions list (like the ones in an episode's page)
     function addLinkToActionList(actionList, type) {
         let itemLink = location.pathname;
-        let itemLinkMatches = itemLink.match(regex[type]);
-        let showTitle = itemLinkMatches[1].replace(/-/g, ' ');
-        let seasonNumber = itemLinkMatches[2];
-        let codeNumber = '';
-        if (type === 'season') {
-            codeNumber = `S${zeroPad(seasonNumber,2)}`;
-        } else if (type === 'episode') {
-            let episodeNumber = itemLinkMatches[3];
-            codeNumber = `S${zeroPad(seasonNumber, 2)}E${zeroPad(episodeNumber, 2)}`;
-        }
-        let urlSearch = urlRarbg + encodeURIComponent(showTitle + ' ' + codeNumber).replace(/%20/g, '+');
+        let query = extractQueryFromLink(itemLink, type);
+        let urlSearch = makeTorrentURL(query);
         let target = GM_config.get('openInNewTab') ? '_blank' : '_self';
+        let searchEngineName = GM_config.get('torrentSearchEngine');
         actionList.append(
             `
             <a class="btn btn-block btn-summary btn-tpc" href="${urlSearch}" target="${target}">
                 <div class="fa fa-fw trakt-icon-skull-bones"></div>
                 <div class="text">
-                    <div class="main-info">Search on RARBG</div>
+                    <div class="main-info">Search on ${searchEngineName}</div>
                 </div>
             </a>
             `
@@ -256,14 +322,14 @@
 
     // Process calendar page
     function processCalendarPage() {
-        // RARBG links
+        // Torrent links
         $('.grid-item[data-type="episode"]').each(function() {
             addLinkToGridItem(this, 'episode');
         });
 
         // Autoscroll to current date
         if (GM_config.get('autoscrollToday')) {
-            whenCalendarReady(function() {
+            whenCalendarReady(() => {
                 // Extract the calendar date from the URL
                 let today = new Date();
                 let calendarDate = new Date(window.location.href.substring(window.location.href.lastIndexOf('/') + 1));
@@ -289,11 +355,10 @@
                 <div class="fa fa-fw trakt-icon-settings"></div>
             </a>
             `
-        ).on('click', function () {
-            GM_config.open();
-        }).appendTo('.sidenav-inner');
+        ).on('click', () => GM_config.open())
+        .appendTo('.sidenav-inner');
 
-        // Add events to arrows
+       // Add events to arrows
         whenCalendarReady(() =>
             // Add events to process page again if the user changes month
             $('.prev, .next').on('click', () => whenCalendarReady(() =>
@@ -305,14 +370,13 @@
 
     // Process show page
     function processShowPage() {
-        // RARBG links
         $('.grid-item[data-type="season"]').each(function() {
             addLinkToGridItem(this, 'season');
         });
     }
 
-    // Process seasons page
-    function processSeasonsPage() {
+    // Process season page
+    function processSeasonPage() {
         $('.grid-item[data-type="episode"]').each(function() {
             addLinkToGridItem(this, 'episode');
         });
@@ -324,16 +388,20 @@
         addLinkToActionList($('.action-buttons'), 'episode');
     }
 
-    if (regex.calendar.test(location.pathname)) {
-        processCalendarPage();
+    function processPage() {
+        if (regex.calendar.test(location.pathname)) {
+            processCalendarPage();
+        }
+        else if (regex.show.test(location.pathname)) {
+            processShowPage();
+        }
+        else if (regex.season.test(location.pathname)) {
+            processSeasonPage();
+        }
+        else if (regex.episode.test(location.pathname)) {
+            processEpisodePage();
+        }
     }
-    else if (regex.show.test(location.pathname)) {
-        processShowPage();
-    }
-    else if (regex.season.test(location.pathname)) {
-        processSeasonsPage();
-    }
-    else if (regex.episode.test(location.pathname)) {
-        processEpisodePage();
-    }
+
+    processPage();
 })();
