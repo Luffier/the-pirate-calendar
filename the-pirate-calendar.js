@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.5.0
+// @version      0.5.1
 // @description  Adds torrent links (RARBG, The Pirate Bay, and more) to trakt.tv (now with a settings menu!)
 // @author       luffier
 // @namespace    PirateCalendar
@@ -8,7 +8,7 @@
 // @match        *://trakt.tv/
 // @match        *://trakt.tv/*
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
-// @require      https://code.jquery.com/jquery-3.6.0.slim.min.js
+// @require      https://code.jquery.com/jquery-3.6.1.slim.min.js
 // @grant        GM_addStyle
 // @grant        GM_listValues
 // @grant        GM_setValue
@@ -334,12 +334,13 @@
                 let today = new Date();
                 let calendarDate = new Date(window.location.href.substring(window.location.href.lastIndexOf('/') + 1));
                 // If there's no date (current month) or it's current month then autoscroll
-                if(isNaN(calendarDate) || calendarDate.getMonth() === today.getMonth()) {
+                if(isNaN(calendarDate) || (calendarDate.getMonth() === today.getMonth() && calendarDate.getYear() === today.getYear())) {
                     let todayCard = $('.date-separator:not(.filler) .date').filter(function () {
                         return $(this).text() == today.getDate();
                     }).first().get(0);
                     if (todayCard) {
                         todayCard.scrollIntoView(true);
+                        // Scroll up to compensate top navbar
                         let topNav = $('#top-nav').first().get(0);
                         let offset = -window.getComputedStyle(topNav).getPropertyValue('height').slice(0, -2);
                         window.scrollBy(0, offset);
