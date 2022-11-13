@@ -1,14 +1,13 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.5.1
-// @description  Adds torrent links (RARBG, The Pirate Bay, and more) to trakt.tv (now with a settings menu!)
+// @version      0.6.0
+// @description  Adds torrent links (RARBG, The Pirate Bay and more) to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
 // @license      MIT
 // @match        *://trakt.tv/
 // @match        *://trakt.tv/*
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
-// @require      https://code.jquery.com/jquery-3.6.1.slim.min.js
 // @grant        GM_addStyle
 // @grant        GM_listValues
 // @grant        GM_setValue
@@ -21,59 +20,66 @@
 // @supportURL   https://github.com/Luffier/the-pirate-calendar/issues
 // ==/UserScript==
 
-/* globals $, GM_config */
+/* globals GM_config */
 /* jshint esversion: 6 */
 
 (() => {
     'use strict';
 
-    /* GLOBAL STYLES */
-    $(
-        `
-            <style>
-                iframe#PirateCalendarConfig {
-                    height: 480px !important;
-                    width: 500px !important;
-                }
-                .actions .tpc {
-                    transition: background-color .2s ease 0s;
-                    font-size: 22px !important;
-                    color: rgb(56, 96, 187);
-                }
-                .actions .tpc:hover {
-                    background-color: rgb(255, 255, 255, 0.25);
-                    transition: background-color .2s ease 0s;
-                    color: rgb(18, 40, 89);
-                }
-                .action-buttons .btn-tpc {
-                    margin-top: 5px;
-                    color: rgb(56, 96, 187);
-                    background-color: #fff;
-                    border-color: rgb(56, 96, 187);
-                    border: solid 1px rgb(56, 96, 187);
-                    transition: all .5s;
-                }
-                .action-buttons .btn-tpc:hover {
-                    background-color: rgb(18, 40, 89);
-                    color: white;
-                    transition: all .5s;
-                }
-                .tcp-settings {
-                    font-size: 40px !important;
-                    color: rgb(237, 28, 36);
-                }
-            </style>
-        `
-    ).appendTo($('head'));
+    // Single element selector shorthand
+    const $ = document.querySelector.bind(document);
+
+    // Multiple elements selector shorthand
+    const $$ = document.querySelectorAll.bind(document);
 
 
-    /* GLOBAL VARIABLES */
+    /* VARIABLES */
+
+    // Global styles
+    const style = `
+    <style>
+        iframe#PirateCalendarConfig {
+            height: 480px !important;
+            width: 500px !important;
+        }
+        .actions .tpc {
+            transition: background-color .2s ease 0s;
+            font-size: 22px !important;
+            color: rgb(56, 96, 187);
+        }
+        .actions .tpc:hover {
+            background-color: rgb(255, 255, 255, 0.25);
+            transition: background-color .2s ease 0s;
+            color: rgb(18, 40, 89);
+        }
+        .action-buttons .btn-tpc {
+            margin-top: 5px;
+            color: rgb(56, 96, 187);
+            background-color: #fff;
+            border-color: rgb(56, 96, 187);
+            border: solid 1px rgb(56, 96, 187);
+            transition: all .5s;
+        }
+        .action-buttons .btn-tpc:hover {
+            background-color: rgb(18, 40, 89);
+            color: white;
+            transition: all .5s;
+        }
+        .tcp-settings {
+            font-size: 40px !important;
+            color: rgb(237, 28, 36);
+        }
+    </style>
+    `;
+
     const regex = {
         calendar: /^\/calendars\/my\/shows/,
         show: /^\/shows\/([^\/]+)(\/)?$/,
         season: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)(\/)?$/,
         episode: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)\/episodes\/([^\/]+)(\/)?$/,
     };
+
+    // Default search engines parameters
     const searchEngines = {
         'RARBG': {
             'defaultUrl': 'https://rarbg.to/',
@@ -91,9 +97,13 @@
             'cleanQuery': (query) => encodeURIComponent(query).replace(/%20/g, '+')
         }
     };
+
+    // Interval storage
     const intervals = {};
 
+
     /* SETTINGS MENU */
+
     GM_config.init({
         'id': 'PirateCalendarConfig',
         'title': 'The Pirate Calendar Settings',
@@ -225,6 +235,52 @@
 
 
     /* FUNCTIONS */
+
+    // Create element
+    function createElement(html) {
+        const template = document.createElement('template');
+        template.innerHTML = html.trim();
+        return template.content.firstChild;
+    }
+
+    // Function to replicate the `toggle` function in jQuery
+    function toggle(el, option) {
+        if (typeof option === 'boolean') {
+            if (option) {
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
+        } else {
+            if (el.style.display === 'none') {
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+    }
+
+    // Function to replicate the `on` function in jQuery
+    function addEventListener(el, eventName, eventHandler, selector) {
+        if (selector) {
+            const wrappedHandler = (e) => {
+                if (e.target && e.target.matches(selector)) {
+                    eventHandler(e);
+                }
+            };
+            el.addEventListener(eventName, wrappedHandler);
+            return wrappedHandler;
+        } else {
+            el.addEventListener(eventName, eventHandler);
+            return eventHandler;
+        }
+    }
+
+    // Function to replicate the `:visible` selector used in jQuery
+    function isVisible(el) {
+        return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    }
+
     // Pad number with leading zeros
     function zeroPad (number, places) {
         return String(number).padStart(places, '0');
@@ -235,7 +291,7 @@
         setTimeout(() => {
             intervals[intervalName] = setInterval(() => {
                 // If the loading indicator and the progress bar aren't visible, the calendar is ready
-                if (!$('#loading-bg').is(':visible') && $('.turbolinks-progress-bar').length === 0) {
+                if (!isVisible($('#loading-bg')) && $$('.turbolinks-progress-bar').length === 0) {
                     clearInterval(intervals[intervalName]);
                     callback();
                 }
@@ -248,14 +304,12 @@
         // Apply calendar settings
         if (regex.calendar.test(location.pathname)) {
             // Hide unwanted icons
-            $('.quick-icons .collect').toggle(!GM_config.get('hideCollectIcon'));
-            $('.quick-icons .list').toggle(!GM_config.get('hideListIcon'));
-            $('.quick-icons .watch-now').toggle(!GM_config.get('hideWatchtIcon'));
+            for (const el of [...$$('.quick-icons .collect')]) { toggle(el, !GM_config.get('hideCollectIcon')); }
+            for (const el of [...$$('.quick-icons .list')]) { toggle(el, !GM_config.get('hideListIcon')); }
+            for (const el of [...$$('.quick-icons .watch-now')]) { toggle(el, !GM_config.get('hideWatchtIcon')); }
             // Remove and add all the links again
-            $('.grid-item[data-type="episode"] a.tpc').remove();
-            $('.grid-item[data-type="episode"]').each(function() {
-                addLinkToGridItem(this, 'episode');
-            });
+            for (const el of [...$$('.grid-item[data-type="episode"] a.tpc')]) { el.remove(); }
+            for (const el of [...$$('.grid-item[data-type="episode"]')]) { addLinkToGridItem(el, 'episode'); }
         }
     }
 
@@ -284,21 +338,20 @@
     }
 
     // Adds a search link to a grid item (like those from the calendar)
-    function addLinkToGridItem(gridItem, type) {
-        let item = $(gridItem);
-        let actions = item.find('> div.quick-icons > div.actions').first();
-        let itemLink = item.find('a').first().attr('href');
+    function addLinkToGridItem(item, type) {
+        let actions = item.querySelector(`:scope ${'> div.quick-icons > div.actions'}`);
+        let itemLink = item.querySelector(`:scope ${'a'}`).getAttribute('href');
         let query = extractQueryFromLink(itemLink, type);
         let urlSearch = makeTorrentURL(query);
         let target = GM_config.get('openInNewTab') ? '_blank' : '_self';
         let searchEngineName = GM_config.get('torrentSearchEngine');
-        actions.append(
+        actions.append(createElement(
             `
             <a class="tpc" href="${urlSearch}" target="${target}" title="Search on ${searchEngineName}">
                 <div class="trakt-icon-skull-bones"></div>
             </a>
             `
-        );
+        ));
     }
 
     // Adds a search link to an actions list (like the ones in an episode's page)
@@ -308,7 +361,7 @@
         let urlSearch = makeTorrentURL(query);
         let target = GM_config.get('openInNewTab') ? '_blank' : '_self';
         let searchEngineName = GM_config.get('torrentSearchEngine');
-        actionList.append(
+        actionList.append(createElement(
             `
             <a class="btn btn-block btn-summary btn-tpc" href="${urlSearch}" target="${target}">
                 <div class="fa fa-fw trakt-icon-skull-bones"></div>
@@ -317,16 +370,15 @@
                 </div>
             </a>
             `
-        );
+        ));
     }
 
     // Process calendar page
     function processCalendarPage() {
         // Torrent links
-        $('.grid-item[data-type="episode"]').each(function() {
-            addLinkToGridItem(this, 'episode');
-        });
-
+        for (const el of [...$$('.grid-item[data-type="episode"]')]) {
+            addLinkToGridItem(el, 'episode');
+        }
         // Autoscroll to current date
         if (GM_config.get('autoscrollToday')) {
             whenCalendarReady(() => {
@@ -335,13 +387,13 @@
                 let calendarDate = new Date(window.location.href.substring(window.location.href.lastIndexOf('/') + 1));
                 // If there's no date (current month) or it's current month then autoscroll
                 if(isNaN(calendarDate) || (calendarDate.getMonth() === today.getMonth() && calendarDate.getYear() === today.getYear())) {
-                    let todayCard = $('.date-separator:not(.filler) .date').filter(function () {
-                        return $(this).text() == today.getDate();
-                    }).first().get(0);
+                    let todayCard = [...$$('.date-separator:not(.filler) .date')].filter((el) => {
+                        return el.textContent == today.getDate();
+                    })[0];
                     if (todayCard) {
                         todayCard.scrollIntoView(true);
                         // Scroll up to compensate top navbar
-                        let topNav = $('#top-nav').first().get(0);
+                        let topNav = $('#top-nav');
                         let offset = -window.getComputedStyle(topNav).getPropertyValue('height').slice(0, -2);
                         window.scrollBy(0, offset);
                     }
@@ -350,37 +402,39 @@
         }
 
         // Settings menu icon
-        $(
+        let menuIcon = createElement(
             `
             <a class="tcp-settings" title="The Pirate Calendar Settings">
                 <div class="fa fa-fw trakt-icon-settings"></div>
             </a>
             `
-        ).on('click', () => GM_config.open())
-        .appendTo('.sidenav-inner');
+        );
+        menuIcon = $('.sidenav-inner').appendChild(menuIcon);
+        addEventListener(menuIcon, 'click', () => GM_config.open());
 
        // Add events to arrows
-        whenCalendarReady(() =>
-            // Add events to process page again if the user changes month
-            $('.prev, .next').on('click', () => whenCalendarReady(() =>
-                processCalendarPage(), 'processAfterChangingMonth')),
-        'addArrowsEvents');
-
+        whenCalendarReady(() => {
+            for (const el of [...$$('.prev, .next')]) { 
+                addEventListener(
+                    el,
+                    'click',
+                    () => whenCalendarReady(() => processCalendarPage(), 'processAfterChangingMonth'),
+                    'addArrowsEvents'
+                );
+            }
+        });
         applySettings();
     }
 
     // Process show page
     function processShowPage() {
-        $('.grid-item[data-type="season"]').each(function() {
-            addLinkToGridItem(this, 'season');
-        });
+        for (const el of [...$$('.grid-item[data-type="season"]')]) { addLinkToGridItem(el, 'season'); }
+        addLinkToActionList($('.action-buttons'), 'show');
     }
 
     // Process season page
     function processSeasonPage() {
-        $('.grid-item[data-type="episode"]').each(function() {
-            addLinkToGridItem(this, 'episode');
-        });
+        for (const el of [...$$('.grid-item[data-type="episode"]')]) { addLinkToGridItem(el, 'episode'); }
         addLinkToActionList($('.action-buttons'), 'season');
     }
 
@@ -389,6 +443,7 @@
         addLinkToActionList($('.action-buttons'), 'episode');
     }
 
+    // Main function
     function processPage() {
         if (regex.calendar.test(location.pathname)) {
             processCalendarPage();
@@ -404,5 +459,9 @@
         }
     }
 
+    // Apply styles
+    $('head').append(createElement(style));
+
+    // Process page
     processPage();
 })();
