@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.0
+// @version      0.6.1
 // @description  Adds torrent links (RARBG, The Pirate Bay and more) to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
@@ -77,6 +77,8 @@
         show: /^\/shows\/([^\/]+)(\/)?$/,
         season: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)(\/)?$/,
         episode: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)\/episodes\/([^\/]+)(\/)?$/,
+        movies: /^\/movies(\/(boxoffice|anticipated|popular|trending|recommended|watched|collected))?(\/weekly)?$/,
+        movie: /^\/movies\/([^\/]+-[0-9]{4})$/
     };
 
     // Default search engines parameters
@@ -324,17 +326,22 @@
 
     function extractQueryFromLink(link, type) {
         let itemLinkMatches = link.match(regex[type]);
-        let showTitle = itemLinkMatches[1].replace(/-/g, ' ');
-        let seasonNumber = itemLinkMatches[2];
-        let codeNumber = '';
-        if (type === 'season') {
-            codeNumber = `S${zeroPad(seasonNumber,2)}`;
-        } else if (type === 'episode') {
-            let episodeNumber = itemLinkMatches[3];
-            codeNumber = `S${zeroPad(seasonNumber, 2)}E${zeroPad(episodeNumber, 2)}`;
+        if (itemLinkMatches === null) {
+            return link.replace(/-/g, ' ').replace(/\//g, ' ');
+        } else {
+            let title = itemLinkMatches[1].replace(/-/g, ' ');
+            let seasonNumber = itemLinkMatches[2];
+            let query = title;
+            if (type === 'season') {
+                let codeNumber = `S${zeroPad(seasonNumber,2)}`;
+                query = query + ' ' + codeNumber;
+            } else if (type === 'episode') {
+                let episodeNumber = itemLinkMatches[3];
+                let codeNumber = `S${zeroPad(seasonNumber, 2)}E${zeroPad(episodeNumber, 2)}`;
+                query = query + ' ' + codeNumber;
+            }
+            return query;
         }
-        let query = showTitle + ' ' + codeNumber;
-        return query;
     }
 
     // Adds a search link to a grid item (like those from the calendar)
@@ -443,6 +450,16 @@
         addLinkToActionList($('.action-buttons'), 'episode');
     }
 
+    // Process movies page
+    function processMoviesPage() {
+        for (const el of [...$$('.grid-item[data-type="movie"]')]) { addLinkToGridItem(el, 'movie'); }
+    }
+
+    // Process movie page
+    function processMoviePage() {
+        addLinkToActionList($('.action-buttons'), 'movie');
+    }
+
     // Main function
     function processPage() {
         if (regex.calendar.test(location.pathname)) {
@@ -456,6 +473,12 @@
         }
         else if (regex.episode.test(location.pathname)) {
             processEpisodePage();
+        }
+        else if (regex.movies.test(location.pathname)) {
+            processMoviesPage();
+        }
+        else if (regex.movie.test(location.pathname)) {
+            processMoviePage();
         }
     }
 
