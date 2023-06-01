@@ -1,20 +1,17 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.2
+// @version      0.6.3
 // @description  Adds torrent links to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
 // @license      MIT
 // @match        *://trakt.tv/
 // @match        *://trakt.tv/*
-// @require      https://cdn.jsdelivr.net/gh/sizzlemctwizzle/GM_config@43fd0fe4de1166f343883511e53546e87840aeaf/gm_config.js
-// @grant        GM_addStyle
-// @grant        GM_listValues
+// @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_deleteValue
-// @grant        GM_registerMenuCommand
-// @grant        unsafeWindow
+// @grant        GM.getValue
+// @grant        GM.setValue
 // @run-at       document-idle
 // @homepageURL  https://github.com/Luffier/the-pirate-calendar
 // @supportURL   https://github.com/Luffier/the-pirate-calendar/issues
@@ -68,6 +65,13 @@
         .tcp-icon {
             font-size: 40px !important;
             color: rgb(237, 28, 36);
+        }
+        .tcp-jump-icon {
+            position: fixed;
+            font-size: 30px !important;
+            bottom: 25px;
+            right: 25px;
+            z-index: 1;
         }
     </style>
     `;
@@ -216,7 +220,7 @@
                 }
             `,
         'events': {
-            'init': function() { } ,
+            'init': init,
             'open': function() {
                 // Set default URL and search path when the search engine changes
                 this.fields.torrentSearchEngine.node.addEventListener('change', function() {
@@ -434,12 +438,12 @@
         if(isCalendarPageCurrentMonth()) {
             let jumpIcon = createElement(
                 `
-                <a class="tcp-icon" title="Jump to current day">
+                <a class="tcp-icon tcp-jump-icon" title="Jump to current day">
                     <div class="fa fa-calendar-xmark"></div>
                 </a>
                 `
             );
-            jumpIcon = $('.sidenav-inner').appendChild(jumpIcon);
+            jumpIcon = $('body').appendChild(jumpIcon);
             addEventListener(jumpIcon, 'click', () => scrollCurrentDate());
         }
 
@@ -505,13 +509,14 @@
         }
     }
 
-    // Apply styles
-    $('head').append(createElement(style));
+    function init() {
+        // Apply styles
+        $('head').append(createElement(style));
 
-    validateSettings();
+        validateSettings();
 
-    processPage();
+        processPage();
 
-    applySettings();
-
+        applySettings();
+    }
 })();
