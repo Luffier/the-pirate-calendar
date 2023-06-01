@@ -1,20 +1,20 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.1
-// @description  Adds torrent links (RARBG, The Pirate Bay and more) to trakt.tv. Now with a settings menu!
+// @version      0.6.2
+// @description  Adds torrent links to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
 // @license      MIT
 // @match        *://trakt.tv/
 // @match        *://trakt.tv/*
-// @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
+// @require      https://cdn.jsdelivr.net/gh/sizzlemctwizzle/GM_config@43fd0fe4de1166f343883511e53546e87840aeaf/gm_config.js
 // @grant        GM_addStyle
 // @grant        GM_listValues
-// @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM_deleteValue
-// @grant        unsafeWindow
 // @grant        GM_registerMenuCommand
+// @grant        unsafeWindow
 // @run-at       document-idle
 // @homepageURL  https://github.com/Luffier/the-pirate-calendar
 // @supportURL   https://github.com/Luffier/the-pirate-calendar/issues
@@ -65,7 +65,7 @@
             color: white;
             transition: all .5s;
         }
-        .tcp-settings {
+        .tcp-icon {
             font-size: 40px !important;
             color: rgb(237, 28, 36);
         }
@@ -83,19 +83,19 @@
 
     // Default search engines parameters
     const searchEngines = {
-        'RARBG': {
-            'defaultUrl': 'https://rarbg.to/',
-            'defaultSearch': 'torrents.php?order=size&by=DESC&search=%s',
+        '1337x': {
+            'defaultUrl': 'https://1337x.to/',
+            'defaultSearch': 'sort-search/%s/size/desc/1/',
             'cleanQuery': (query) => encodeURIComponent(query).replace(/%20/g, '+')
         },
-        'The Pirate Bay': {
-            'defaultUrl': 'https://thepiratebay.org/',
-            'defaultSearch': 'search/%s/1/5/0',
-            'cleanQuery': (query) => encodeURIComponent(query)
+        'Torrent Galaxy': {
+            'defaultUrl': 'https://torrentgalaxy.to/',
+            'defaultSearch': 'torrents.php?search=%s&lang=0&nox=2&sort=size&order=desc',
+            'cleanQuery': (query) => encodeURIComponent(query).replace(/%20/g, '+')
         },
-        'EZTV': {
-            'defaultUrl': '',
-            'defaultSearch': '',
+        'Custom': {
+            'defaultUrl': 'Write a custom URL',
+            'defaultSearch': 'Write a custom query string',
             'cleanQuery': (query) => encodeURIComponent(query).replace(/%20/g, '+')
         }
     };
@@ -140,21 +140,21 @@
             'torrentSearchEngine': {
                 'label': 'Preferred torrent search engine:',
                 'type': 'select',
-                'options': ['RARBG', 'The Pirate Bay'],
-                'default': 'RARBG',
+                'options': Object.keys(searchEngines),
+                'default': Object.keys(searchEngines)[0],
                 'section': ['Search engine']
             },
             'customUrl': {
                 'label': '&#183; URL:',
                 'title': 'For a custom URL (like a proxy)',
                 'type': 'text',
-                'default': searchEngines.RARBG.defaultUrl
+                'default': searchEngines[Object.keys(searchEngines)[0]].defaultUrl
             },
             'customSearch': {
                 'label': '&#183; Search query:',
                 'title': 'For a custom search query. Place "%s" where the query should be',
                 'type': 'text',
-                'default': searchEngines.RARBG.defaultSearch
+                'default': searchEngines[Object.keys(searchEngines)[0]].defaultSearch
             }
         },
         'css':
@@ -216,12 +216,10 @@
                 }
             `,
         'events': {
-            'init': function() {
-                applySettings();
-            },
+            'init': function() { } ,
             'open': function() {
                 // Set default URL and search path when the search engine changes
-                GM_config.fields.torrentSearchEngine.node.addEventListener('change', function() {
+                this.fields.torrentSearchEngine.node.addEventListener('change', function() {
                     let searchEngine = searchEngines[this.value];
                     let section = this.parentElement.parentElement;
                     section.querySelector('#PirateCalendarConfig_field_customUrl').value = searchEngine.defaultUrl;
@@ -230,11 +228,10 @@
             },
             'save': function() {
                 applySettings();
-                GM_config.close();
-            }
+                this.close();
+            },
         }
     });
-
 
     /* FUNCTIONS */
 
@@ -301,6 +298,14 @@
         }, 200);
     }
 
+    // Validate settings in case stored settings no longer exist in the current script version
+    function validateSettings() {
+        let searchEngine = GM_config.get('torrentSearchEngine');
+        if (!searchEngines.hasOwnProperty(searchEngine)) {
+            GM_config.set('torrentSearchEngine', GM_config.fields.torrentSearchEngine.default);
+        }
+    }
+
     // Apply settings from the setting's menu
     function applySettings() {
         // Apply calendar settings
@@ -316,10 +321,10 @@
     }
 
     function makeTorrentURL(query) {
-        let searchEngine = searchEngines[GM_config.get('torrentSearchEngine')];
         let baseURL = GM_config.get('customUrl');
         let queryPath = GM_config.get('customSearch');
-        let queryCleaned = searchEngine.cleanQuery(query);
+        let searchEngine = GM_config.get('torrentSearchEngine');
+        let queryCleaned = searchEngines[searchEngine].cleanQuery(query);
         let url = baseURL + queryPath.replace(/%s/g, queryCleaned);
         return url;
     }
@@ -380,48 +385,67 @@
         ));
     }
 
+    function isCalendarPageCurrentMonth() {
+        let today = new Date();
+        // Extract the calendar date from the URL
+        let calendarDate = new Date(window.location.href.substring(window.location.href.lastIndexOf('/') + 1));
+        // If there's no date (current month) or it's the current month then return true
+        return (isNaN(calendarDate) || (calendarDate.getMonth() === today.getMonth() && calendarDate.getYear() === today.getYear()))
+    }
+
+    // Autoscroll to current date
+    function scrollCurrentDate() {
+        if(isCalendarPageCurrentMonth()) {
+            let todayCard = [...$$('.date-separator:not(.filler) .date')].filter((el) => {
+                return el.textContent == (new Date()).getDate();
+            })[0];
+            if (todayCard) {
+                todayCard.scrollIntoView(true);
+                // Scroll up to compensate top navbar
+                let topNav = $('#top-nav');
+                let offset = -window.getComputedStyle(topNav).getPropertyValue('height').slice(0, -2);
+                window.scrollBy(0, offset);
+            }
+        }
+    }
+
     // Process calendar page
     function processCalendarPage() {
         // Torrent links
         for (const el of [...$$('.grid-item[data-type="episode"]')]) {
             addLinkToGridItem(el, 'episode');
         }
-        // Autoscroll to current date
         if (GM_config.get('autoscrollToday')) {
-            whenCalendarReady(() => {
-                // Extract the calendar date from the URL
-                let today = new Date();
-                let calendarDate = new Date(window.location.href.substring(window.location.href.lastIndexOf('/') + 1));
-                // If there's no date (current month) or it's current month then autoscroll
-                if(isNaN(calendarDate) || (calendarDate.getMonth() === today.getMonth() && calendarDate.getYear() === today.getYear())) {
-                    let todayCard = [...$$('.date-separator:not(.filler) .date')].filter((el) => {
-                        return el.textContent == today.getDate();
-                    })[0];
-                    if (todayCard) {
-                        todayCard.scrollIntoView(true);
-                        // Scroll up to compensate top navbar
-                        let topNav = $('#top-nav');
-                        let offset = -window.getComputedStyle(topNav).getPropertyValue('height').slice(0, -2);
-                        window.scrollBy(0, offset);
-                    }
-                }
-            }, 'autoscroll');
+            whenCalendarReady(() => { scrollCurrentDate(); }, 'autoscroll');
         }
 
         // Settings menu icon
         let menuIcon = createElement(
             `
-            <a class="tcp-settings" title="The Pirate Calendar Settings">
-                <div class="fa fa-fw trakt-icon-settings"></div>
+            <a class="tcp-icon" title="The Pirate Calendar Settings">
+                <div class="fa fa-gear"></div>
             </a>
             `
         );
         menuIcon = $('.sidenav-inner').appendChild(menuIcon);
         addEventListener(menuIcon, 'click', () => GM_config.open());
 
+        // Jump icon
+        if(isCalendarPageCurrentMonth()) {
+            let jumpIcon = createElement(
+                `
+                <a class="tcp-icon" title="Jump to current day">
+                    <div class="fa fa-calendar-xmark"></div>
+                </a>
+                `
+            );
+            jumpIcon = $('.sidenav-inner').appendChild(jumpIcon);
+            addEventListener(jumpIcon, 'click', () => scrollCurrentDate());
+        }
+
        // Add events to arrows
         whenCalendarReady(() => {
-            for (const el of [...$$('.prev, .next')]) { 
+            for (const el of [...$$('.prev, .next')]) {
                 addEventListener(
                     el,
                     'click',
@@ -430,7 +454,6 @@
                 );
             }
         });
-        applySettings();
     }
 
     // Process show page
@@ -485,6 +508,10 @@
     // Apply styles
     $('head').append(createElement(style));
 
-    // Process page
+    validateSettings();
+
     processPage();
+
+    applySettings();
+
 })();
