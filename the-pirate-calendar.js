@@ -1,18 +1,18 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.3
+// @version      0.6.4
 // @description  Adds torrent links to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
 // @license      MIT
-// @match        *://trakt.tv/
-// @match        *://trakt.tv/*
+// @match        https://trakt.tv/*
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @run-at       document-idle
+// @sandbox      raw
 // @homepageURL  https://github.com/Luffier/the-pirate-calendar
 // @supportURL   https://github.com/Luffier/the-pirate-calendar/issues
 // ==/UserScript==
@@ -78,10 +78,11 @@
 
     const regex = {
         calendar: /^\/calendars\/my\/shows/,
+        shows: /^\/shows(\/(trending|popular|favorited|recommended|watched|collected|anticipated))?(\/weekly)?$/,
         show: /^\/shows\/([^\/]+)(\/)?$/,
         season: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)(\/)?$/,
         episode: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)\/episodes\/([^\/]+)(\/)?$/,
-        movies: /^\/movies(\/(boxoffice|anticipated|popular|trending|recommended|watched|collected))?(\/weekly)?$/,
+        movies: /^\/movies(\/(trending|popular|favorited|recommended|watched|collected|anticipated|boxoffice))?(\/weekly)?$/,
         movie: /^\/movies\/([^\/]+-[0-9]{4})$/
     };
 
@@ -461,6 +462,11 @@
     }
 
     // Process show page
+    function processShowsPage() {
+        for (const el of [...$$('.grid-item[data-type="show"]')]) { addLinkToGridItem(el, 'show'); }
+    }
+
+    // Process show page
     function processShowPage() {
         for (const el of [...$$('.grid-item[data-type="season"]')]) { addLinkToGridItem(el, 'season'); }
         addLinkToActionList($('.action-buttons'), 'show');
@@ -491,6 +497,9 @@
     function processPage() {
         if (regex.calendar.test(location.pathname)) {
             processCalendarPage();
+        }
+        else if (regex.shows.test(location.pathname)) {
+            processShowsPage();
         }
         else if (regex.show.test(location.pathname)) {
             processShowPage();
