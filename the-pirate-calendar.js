@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.4
+// @version      0.6.5
 // @description  Adds torrent links to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
@@ -22,13 +22,6 @@
 
 (() => {
     'use strict';
-
-    // Single element selector shorthand
-    const $ = document.querySelector.bind(document);
-
-    // Multiple elements selector shorthand
-    const $$ = document.querySelectorAll.bind(document);
-
 
     /* VARIABLES */
 
@@ -105,9 +98,11 @@
         }
     };
 
-    // Interval storage
-    const intervals = {};
-
+    // Helper for whenPageReady function
+    const pageReady = {
+        timeout: true,
+        startTime: null
+    }
 
     /* SETTINGS MENU */
 
@@ -240,6 +235,12 @@
 
     /* FUNCTIONS */
 
+    // Single element selector shorthand
+    const $ = document.querySelector.bind(document);
+
+    // Multiple elements selector shorthand
+    const $$ = document.querySelectorAll.bind(document);
+
     // Create element
     function createElement(html) {
         const template = document.createElement('template');
@@ -288,19 +289,6 @@
     // Pad number with leading zeros
     function zeroPad (number, places) {
         return String(number).padStart(places, '0');
-    }
-
-    // Executes the callback after the calendar finishes loading
-    function whenCalendarReady(callback, intervalName) {
-        setTimeout(() => {
-            intervals[intervalName] = setInterval(() => {
-                // If the loading indicator and the progress bar aren't visible, the calendar is ready
-                if (!isVisible($('#loading-bg')) && $$('.turbolinks-progress-bar').length === 0) {
-                    clearInterval(intervals[intervalName]);
-                    callback();
-                }
-            }, 100);
-        }, 200);
     }
 
     // Validate settings in case stored settings no longer exist in the current script version
@@ -421,7 +409,7 @@
             addLinkToGridItem(el, 'episode');
         }
         if (GM_config.get('autoscrollToday')) {
-            whenCalendarReady(() => { scrollCurrentDate(); }, 'autoscroll');
+           scrollCurrentDate();
         }
 
         // Settings menu icon
@@ -447,18 +435,6 @@
             jumpIcon = $('body').appendChild(jumpIcon);
             addEventListener(jumpIcon, 'click', () => scrollCurrentDate());
         }
-
-       // Add events to arrows
-        whenCalendarReady(() => {
-            for (const el of [...$$('.prev, .next')]) {
-                addEventListener(
-                    el,
-                    'click',
-                    () => whenCalendarReady(() => processCalendarPage(), 'processAfterChangingMonth'),
-                    'addArrowsEvents'
-                );
-            }
-        });
     }
 
     // Process show page
@@ -518,14 +494,44 @@
         }
     }
 
+    // Executes the callback after the page finishes loading
+    // Using a MutationObserver, a timout is set every time a new mutation happens,
+    // if either the elapsed time bewteen mutations is greater than intervalTime or
+    // the complete elapsed time is greater than maxWaitTime the callback is executed
+    function whenPageReady(callback, intervalTime, maxWaitTime = 2500) {
+        pageReady.startTimer = Date.now();
+        console.log('The Pirate Calendar: waiting for page to load');
+        let observerCallback = (mutationList, observer) => {
+            if (pageReady.timeout) {
+                let delay = (Date.now() - pageReady.startTimer) > maxWaitTime ? 0 : intervalTime;
+                clearTimeout(pageReady.timeout);
+                pageReady.timeout = setTimeout(() => {
+                    console.log(`The Pirate Calendar: page ready in ${Date.now() - pageReady.startTimer}ms!`);
+                    clearTimeout(pageReady.timeout);
+                    pageReady.timeout = null;
+                    observer.disconnect();
+                    callback();
+                }, intervalTime)
+            } else {
+                observer.disconnect();
+            }
+        };
+        let observer = new MutationObserver(observerCallback);
+        observer.observe($('body'), { attributes: true, childList: true, subtree: true });
+    }
+
     function init() {
-        // Apply styles
-        $('head').append(createElement(style));
 
-        validateSettings();
+        whenPageReady(() => {
+            // Apply styles
+            $('head').append(createElement(style));
 
-        processPage();
+            validateSettings();
 
-        applySettings();
+            processPage();
+
+            applySettings();
+        }, 250);
+
     }
 })();
