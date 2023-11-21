@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.5
+// @version      0.6.6
 // @description  Adds torrent links to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
@@ -64,7 +64,7 @@
             font-size: 30px !important;
             bottom: 25px;
             right: 25px;
-            z-index: 1;
+            z-index: 999;
         }
     </style>
     `;
