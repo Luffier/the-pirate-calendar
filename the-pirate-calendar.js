@@ -69,15 +69,19 @@
     </style>
     `;
 
+    // RegEx patterns
+    // For pages: all
+    // For action list: shows, movies
+    // For media cards: movie, show, season, episode
     const REGEX = {
         calendar: /^\/calendars\/my\/shows/,
-        shows: /^\/shows(\/(trending|popular|favorited|recommended|watched|collected|anticipated))?(\/weekly)?$/,
+        shows: /^\/shows(?:\/(?:trending|popular|favorited|recommended|watched|collected|anticipated)?(?:\/[^/]+)?)$/,
         show: /^\/shows\/([^/]+)(\/)?$/,
         season: /^\/shows\/([^/]+)\/seasons\/([^/]+)(\/)?$/,
         episode: /^\/shows\/([^/]+)\/seasons\/([^/]+)\/episodes\/([^/]+)(\/)?$/,
-        movies: /^\/movies(\/(trending|popular|favorited|recommended|watched|collected|anticipated|boxoffice))?(\/weekly)?$/,
-        movie: /^\/movies\/([^/]+-[0-9]{4})$/,
-        list: /^\/users\/[^/]+\/((favorites|watchlist)(\?[^/]+)|(lists\/[^/]+(\?[^/]+)))$/,
+        movies: /^\/movies(?:\/(?:trending|popular|favorited|recommended|watched|collected|anticipated|boxoffice)?(?:\/[^/]+)?)$/,
+        movie: /^\/movies\/([^/]+(?<!-[0-9]{4}))(?:(?:-)([0-9]{4}))?$/m,
+        list: /^\/users\/[^/]+\/((?:favorites|watchlist)(\?[^/]+)|(?:lists\/[^/]+(?:\?[^/]+)))$/,
     };
 
     // Default search engines parameters
@@ -283,7 +287,7 @@
     }
 
     // Pad number with leading zeros
-    function zeroPad (number, places) {
+    function zeroPad (number, places = 2) {
         return String(number).padStart(places, '0');
     }
 
@@ -319,23 +323,21 @@
     }
 
     function extractQueryFromLink(link, type) {
+        let query = link;
         let itemLinkMatches = link.match(REGEX[type]);
-        if (itemLinkMatches === null) {
-            return link.replace(/-/g, ' ').replace(/\//g, ' ');
-        } else {
-            let title = itemLinkMatches[1].replace(/-/g, ' ');
-            let seasonNumber = itemLinkMatches[2];
-            let query = title;
-            if (type === 'season') {
-                let codeNumber = `S${zeroPad(seasonNumber,2)}`;
-                query = query + ' ' + codeNumber;
-            } else if (type === 'episode') {
-                let episodeNumber = itemLinkMatches[3];
-                let codeNumber = `S${zeroPad(seasonNumber, 2)}E${zeroPad(episodeNumber, 2)}`;
-                query = query + ' ' + codeNumber;
+        if (itemLinkMatches !== null) {
+            query = itemLinkMatches[1];
+            if (type === 'movie' && itemLinkMatches[2] !== undefined) {
+                query += ' ' + itemLinkMatches[2];
             }
-            return query;
+            if (type === 'season') {
+                query += ' ' + `S${zeroPad(itemLinkMatches[2])}`;
+            }
+            if (type === 'episode') {
+                query += ' ' + `S${zeroPad(itemLinkMatches[2])}E${zeroPad(itemLinkMatches[3])}`;
+            }
         }
+        return query.replace(/-/g, ' ').replace(/\//g, ' ');
     }
 
     // Adds a search link to a grid item (like those from the calendar)
