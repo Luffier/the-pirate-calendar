@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         The Pirate Calendar (for trakt.tv)
-// @version      0.6.6
+// @version      0.6.7
 // @description  Adds torrent links to trakt.tv. Now with a settings menu!
 // @author       luffier
 // @namespace    PirateCalendar
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 /* globals GM_config */
-/* jshint esversion: 6 */
+/* jshint esversion: 8 */
 
 (() => {
     'use strict';
@@ -26,7 +26,7 @@
     /* VARIABLES */
 
     // Global styles
-    const style = `
+    const STYLE = `
     <style>
         iframe#PirateCalendarConfig {
             height: 480px !important;
@@ -69,18 +69,19 @@
     </style>
     `;
 
-    const regex = {
+    const REGEX = {
         calendar: /^\/calendars\/my\/shows/,
         shows: /^\/shows(\/(trending|popular|favorited|recommended|watched|collected|anticipated))?(\/weekly)?$/,
-        show: /^\/shows\/([^\/]+)(\/)?$/,
-        season: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)(\/)?$/,
-        episode: /^\/shows\/([^\/]+)\/seasons\/([^\/]+)\/episodes\/([^\/]+)(\/)?$/,
+        show: /^\/shows\/([^/]+)(\/)?$/,
+        season: /^\/shows\/([^/]+)\/seasons\/([^/]+)(\/)?$/,
+        episode: /^\/shows\/([^/]+)\/seasons\/([^/]+)\/episodes\/([^/]+)(\/)?$/,
         movies: /^\/movies(\/(trending|popular|favorited|recommended|watched|collected|anticipated|boxoffice))?(\/weekly)?$/,
-        movie: /^\/movies\/([^\/]+-[0-9]{4})$/
+        movie: /^\/movies\/([^/]+-[0-9]{4})$/,
+        list: /^\/users\/[^/]+\/((favorites|watchlist)(\?[^/]+)|(lists\/[^/]+(\?[^/]+)))$/,
     };
 
     // Default search engines parameters
-    const searchEngines = {
+    const SEARCH_ENGINES = {
         '1337x': {
             'defaultUrl': 'https://1337x.to/',
             'defaultSearch': 'sort-search/%s/size/desc/1/',
@@ -99,9 +100,9 @@
     };
 
     // Helper for whenPageReady function
-    const pageReady = {
+    const PAGE_READY = {
         timeout: true,
-        startTime: null
+        startTimer: null
     }
 
     /* SETTINGS MENU */
@@ -140,21 +141,21 @@
             'torrentSearchEngine': {
                 'label': 'Preferred torrent search engine:',
                 'type': 'select',
-                'options': Object.keys(searchEngines),
-                'default': Object.keys(searchEngines)[0],
+                'options': Object.keys(SEARCH_ENGINES),
+                'default': Object.keys(SEARCH_ENGINES)[0],
                 'section': ['Search engine']
             },
             'customUrl': {
                 'label': '&#183; URL:',
                 'title': 'For a custom URL (like a proxy)',
                 'type': 'text',
-                'default': searchEngines[Object.keys(searchEngines)[0]].defaultUrl
+                'default': SEARCH_ENGINES[Object.keys(SEARCH_ENGINES)[0]].defaultUrl
             },
             'customSearch': {
                 'label': '&#183; Search query:',
                 'title': 'For a custom search query. Place "%s" where the query should be',
                 'type': 'text',
-                'default': searchEngines[Object.keys(searchEngines)[0]].defaultSearch
+                'default': SEARCH_ENGINES[Object.keys(SEARCH_ENGINES)[0]].defaultSearch
             }
         },
         'css':
@@ -220,7 +221,7 @@
             'open': function() {
                 // Set default URL and search path when the search engine changes
                 this.fields.torrentSearchEngine.node.addEventListener('change', function() {
-                    let searchEngine = searchEngines[this.value];
+                    let searchEngine = SEARCH_ENGINES[this.value];
                     let section = this.parentElement.parentElement;
                     section.querySelector('#PirateCalendarConfig_field_customUrl').value = searchEngine.defaultUrl;
                     section.querySelector('#PirateCalendarConfig_field_customSearch').value = searchEngine.defaultSearch;
@@ -281,11 +282,6 @@
         }
     }
 
-    // Function to replicate the `:visible` selector used in jQuery
-    function isVisible(el) {
-        return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
-    }
-
     // Pad number with leading zeros
     function zeroPad (number, places) {
         return String(number).padStart(places, '0');
@@ -294,7 +290,7 @@
     // Validate settings in case stored settings no longer exist in the current script version
     function validateSettings() {
         let searchEngine = GM_config.get('torrentSearchEngine');
-        if (!searchEngines.hasOwnProperty(searchEngine)) {
+        if (!Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, searchEngine)) {
             GM_config.set('torrentSearchEngine', GM_config.fields.torrentSearchEngine.default);
         }
     }
@@ -302,7 +298,7 @@
     // Apply settings from the setting's menu
     function applySettings() {
         // Apply calendar settings
-        if (regex.calendar.test(location.pathname)) {
+        if (REGEX.calendar.test(location.pathname)) {
             // Hide unwanted icons
             for (const el of [...$$('.quick-icons .collect')]) { toggle(el, !GM_config.get('hideCollectIcon')); }
             for (const el of [...$$('.quick-icons .list')]) { toggle(el, !GM_config.get('hideListIcon')); }
@@ -317,13 +313,13 @@
         let baseURL = GM_config.get('customUrl');
         let queryPath = GM_config.get('customSearch');
         let searchEngine = GM_config.get('torrentSearchEngine');
-        let queryCleaned = searchEngines[searchEngine].cleanQuery(query);
+        let queryCleaned = SEARCH_ENGINES[searchEngine].cleanQuery(query);
         let url = baseURL + queryPath.replace(/%s/g, queryCleaned);
         return url;
     }
 
     function extractQueryFromLink(link, type) {
-        let itemLinkMatches = link.match(regex[type]);
+        let itemLinkMatches = link.match(REGEX[type]);
         if (itemLinkMatches === null) {
             return link.replace(/-/g, ' ').replace(/\//g, ' ');
         } else {
@@ -471,25 +467,25 @@
 
     // Main function
     function processPage() {
-        if (regex.calendar.test(location.pathname)) {
+        if (REGEX.calendar.test(location.pathname)) {
             processCalendarPage();
         }
-        else if (regex.shows.test(location.pathname)) {
+        else if (REGEX.shows.test(location.pathname)) {
             processShowsPage();
         }
-        else if (regex.show.test(location.pathname)) {
+        else if (REGEX.show.test(location.pathname)) {
             processShowPage();
         }
-        else if (regex.season.test(location.pathname)) {
+        else if (REGEX.season.test(location.pathname)) {
             processSeasonPage();
         }
-        else if (regex.episode.test(location.pathname)) {
+        else if (REGEX.episode.test(location.pathname)) {
             processEpisodePage();
         }
-        else if (regex.movies.test(location.pathname)) {
+        else if (REGEX.movies.test(location.pathname)) {
             processMoviesPage();
         }
-        else if (regex.movie.test(location.pathname)) {
+        else if (REGEX.movie.test(location.pathname)) {
             processMoviePage();
         }
     }
@@ -497,21 +493,28 @@
     // Executes the callback after the page finishes loading
     // Using a MutationObserver, a timout is set every time a new mutation happens,
     // if either the elapsed time bewteen mutations is greater than intervalTime or
-    // the complete elapsed time is greater than maxWaitTime the callback is executed
-    function whenPageReady(callback, intervalTime, maxWaitTime = 2500) {
-        pageReady.startTimer = Date.now();
-        console.log('The Pirate Calendar: waiting for page to load');
+    // the full elapsed time is greater than maxWaitTime the callback is executed
+    function whenPageReady(callback, intervalTime, maxWaitTime = 3000) {
+        PAGE_READY.startTimer = Date.now();
+        console.log('[The Pirate Calendar] Waiting for page to load');
         let observerCallback = (mutationList, observer) => {
-            if (pageReady.timeout) {
-                let delay = (Date.now() - pageReady.startTimer) > maxWaitTime ? 0 : intervalTime;
-                clearTimeout(pageReady.timeout);
-                pageReady.timeout = setTimeout(() => {
-                    console.log(`The Pirate Calendar: page ready in ${Date.now() - pageReady.startTimer}ms!`);
-                    clearTimeout(pageReady.timeout);
-                    pageReady.timeout = null;
+            if (PAGE_READY.timeout) {
+                clearTimeout(PAGE_READY.timeout);
+                if ((Date.now() - PAGE_READY.startTimer) > maxWaitTime) {
+                    console.log(`[The Pirate Calendar] Max wait time exceded, loading script anyway!`);
+                    clearTimeout(PAGE_READY.timeout);
+                    PAGE_READY.timeout = null;
                     observer.disconnect();
                     callback();
-                }, intervalTime)
+                } else {
+                    PAGE_READY.timeout = setTimeout(() => {
+                        console.log(`[The Pirate Calendar] Page ready in ${Date.now() - PAGE_READY.startTimer}ms!`);
+                        clearTimeout(PAGE_READY.timeout);
+                        PAGE_READY.timeout = null;
+                        observer.disconnect();
+                        callback();
+                    }, intervalTime)
+                }
             } else {
                 observer.disconnect();
             }
@@ -524,7 +527,7 @@
 
         whenPageReady(() => {
             // Apply styles
-            $('head').append(createElement(style));
+            $('head').append(createElement(STYLE));
 
             validateSettings();
 
