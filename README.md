@@ -4,6 +4,9 @@ Adds torrent links (RARBG, The Pirate Bay and more) to trakt.tv. Now with a sett
 
 ## Recent changes
 
+#### Version 0.7.0
+- Lists are now supported (like watchlist or favorites)!
+
 #### Version 0.6.5 (changes since 0.6)
 - Removed RARBG (o7) and TPB from the search engines list
 - Added 1337x, Torrent Galaxy and a Custom option
